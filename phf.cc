@@ -1506,7 +1506,11 @@ static void printprimes(int argc, char **argv) {
 	}
 } /* printprimes() */
 
-int main(int argc, char **argv) {
+#if defined(BUILD_MONOLITHIC)
+#define main        phf_hash_main
+#endif
+
+int main(int argc, const char **argv) {
 	const char *path = "/dev/null";
 	size_t lambda = 4;
 	size_t alpha = 80;
