@@ -1248,6 +1248,9 @@ extern "C" int luaopen_phf(lua_State *L) {
 #include <time.h>      /* CLOCKS_PER_SEC clock(3) */
 #include <string.h>    /* strcmp(3) */
 #include <getopt.h>
+#include <iostream>
+#include <bit>		   /* std::countr_zero as a replacement for GCC-specific ffsl() */
+#include <bitset>	   /* std::countr_zero as a replacement for GCC-specific ffsl() */
 #ifndef _WIN32
 #include <sys/param.h> /* BSD */
 #include <unistd.h>    /* getopt(3) */
@@ -1255,6 +1258,18 @@ extern "C" int luaopen_phf(lua_State *L) {
 #include <err.h>       /* err(3) errx(3) warnx(3) */
 #else
 #include <stdarg.h>
+
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+
+#include <windows.h>
+#include <bcrypt.h>
+
+#pragma comment(lib, "bcrypt.lib") // Link against bcrypt.lib
+
+#ifndef NT_SUCCESS
+#define NT_SUCCESS(status) (((NTSTATUS)(status)) >= 0)
+#endif
 
 typedef signed long long ssize_t;
 
@@ -1280,6 +1295,26 @@ static void warnx(const char *fmt, ...) {
 	vfprintf(stderr, fmt, a);
 	va_end(a);
 	fprintf(stderr, "\n");
+}
+
+static void GenerateRandomBytes(BYTE* pbBuffer, DWORD cbBuffer) {
+	NTSTATUS status;
+	BCRYPT_ALG_HANDLE hAlg = NULL;
+
+	// Open the system's preferred RNG algorithm
+	status = BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_RNG_ALGORITHM, NULL, 0);
+	if (NT_SUCCESS(status)) {
+		// Generate random bytes
+		status = BCryptGenRandom(hAlg, pbBuffer, cbBuffer, 0);
+		if (NT_SUCCESS(status)) {
+			fprintf(stderr, "Successfully generated %lu random bytes.\n", (long)cbBuffer);
+		} else {
+			fprintf(stderr, "BCryptGenRandom failed with status: 0x%lx\n", (long)status);
+		}
+		BCryptCloseAlgorithmProvider(hAlg, 0);
+	} else {
+		fprintf(stderr, "BCryptOpenAlgorithmProvider failed with status: 0x%lx\n", (long)status);
+	}
 }
 
 #endif
@@ -1310,6 +1345,13 @@ static uint32_t randomseed(void) {
 	return seed;
 #elif defined BSD /* catchall for modern BSDs, which all have arc4random */
 	return arc4random();
+#elif defined _WIN32
+	union {
+		BYTE buf[sizeof(uint32_t)];
+		uint32_t v;
+	} v;
+	GenerateRandomBytes(v.buf, sizeof(v.buf));
+	return v.v;
 #else
 	FILE *fp;
 	uint32_t seed;
@@ -1368,48 +1410,47 @@ static void addkey(T **k, size_t *n, size_t *z, const char *src) {
 	pushkey(k, n, z, static_cast<T>(strtoull(src, NULL, 0)));
 } /* addkey() */
 
-static void addkey(phf_string_t **k, size_t *n, size_t *z, char *src, size_t len) {
+static void addkey(phf_string_t **k, size_t *n, size_t *z, const char *src, size_t len) {
 	phf_string_t kn = { (void *)src, len };
 	pushkey(k, n, z, kn);
 } /* addkey() */
 
-static void addkey(phf_string_t **k, size_t *n, size_t *z, char *src) {
+static void addkey(phf_string_t **k, size_t *n, size_t *z, const char *src) {
 	addkey(k, n, z, src, strlen(src));
 } /* addkey() */
 
 #if !PHF_NO_LIBCXX
-static void addkey(std::string **k, size_t *n, size_t *z, char *src, size_t len) {
+static void addkey(std::string **k, size_t *n, size_t *z, const char *src, size_t len) {
 	pushkey(k, n, z, std::string(src, len));
 } /* addkey() */
 
-static void addkey(std::string **k, size_t *n, size_t *z, char *src) {
+static void addkey(std::string **k, size_t *n, size_t *z, const char *src) {
 	addkey(k, n, z, src, strlen(src));
 } /* addkey() */
 #endif
 
 template<typename T>
-static void addkeys(T **k, size_t *n, size_t *z, char **src, int count) {
+static void addkeys(T **k, size_t *n, size_t *z, const char **src, int count) {
 	for (int i = 0; i < count; i++)
 		addkey(k, n, z, src[i]);
 } /* addkey() */
 
 template<typename T>
-static void addkeys(T **k, size_t *n, size_t *z, FILE *fp, char **data) {
-	char *ln = NULL;
+static void addkeys(T **k, size_t *n, size_t *z, std::istream &fp, char **data) {
+	std::string ln;
 	size_t lz = 0;
 	ssize_t len;
 
 	(void)data;
 
-	while ((len = getline(&ln, &lz, fp)) > 0) {
+	while (std::getline(fp, ln)) {
+		len = ln.length();
 		if (--len > 0) {
 			if (ln[len] == '\n')
 				ln[len] = '\0';
-			addkey(k, n, z, ln);
+			addkey(k, n, z, ln.c_str());
 		}
 	}
-	
-	free(ln);
 } /* addkeys() */
 
 /* slurp file into a single string and take pointers */
@@ -1470,7 +1511,7 @@ static inline void exec(int argc, const char **argv, size_t lambda, size_t alpha
 	clock_t begin, end;
 
 	addkeys(&k, &n, &z, argv, argc);
-	addkeys(&k, &n, &z, stdin, &data);
+	addkeys(&k, &n, &z, std::cin, &data);
 
 	size_t m = PHF::uniq(k, n);
 	if (verbose)
@@ -1490,7 +1531,7 @@ static inline void exec(int argc, const char **argv, size_t lambda, size_t alpha
 		end = clock();
 		warnx("compacted displacement map in %fs", (double)(end - begin) / CLOCKS_PER_SEC);
 
-		int d_bits = ffsl((long)phf_powerup(phf.d_max));
+		int d_bits = std::countr_zero(phf_powerup(phf.d_max));
 		double k_bits = ((double)phf.r * d_bits) / n;
 		double g_load = (double)n / phf.r;
 		warnx("r:%zu m:%zu d_max:%zu d_bits:%d k_bits:%.2f g_load:%.2f", phf.r, phf.m, phf.d_max, d_bits, k_bits, g_load);
@@ -1634,7 +1675,7 @@ int main(int argc, const char **argv) {
 		return printprimes(argc, argv), 0;
 
 	if (strcmp(path, "-") && !freopen(path, "r", stdin))
-		errx(1, "%s", path);
+		errx(1, "cannot open: %s", path);
 
 	switch (type) {
 	case PHF_UINT32:
