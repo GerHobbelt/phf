@@ -825,7 +825,7 @@ template int PHF::init<std::string, false>(struct phf *, const std::string[], co
 #endif
 
 template<bool nodiv, typename map_t, typename key_t>
-static inline phf_hash_t phf_hash_(map_t *g, key_t k, uint32_t seed, size_t r, size_t m) {
+static inline phf_hash_t phf_hash_(const map_t *g, key_t k, uint32_t seed, size_t r, size_t m) {
 	if (nodiv) {
 		uint32_t d = g[phf_g(k, seed) & (r - 1)];
 
@@ -838,7 +838,7 @@ static inline phf_hash_t phf_hash_(map_t *g, key_t k, uint32_t seed, size_t r, s
 } /* phf_hash_() */
 
 template<typename T>
-PHF_PUBLIC phf_hash_t PHF::hash(struct phf *phf, T k) {
+PHF_PUBLIC phf_hash_t PHF::hash(const struct phf *phf, T k) {
 #if PHF_HAVE_COMPUTED_GOTOS && !PHF_NO_COMPUTED_GOTOS
 	static const void *const jmp[] = {
 		NULL,
@@ -882,11 +882,11 @@ PHF_PUBLIC phf_hash_t PHF::hash(struct phf *phf, T k) {
 #endif
 } /* PHF::hash() */
 
-template phf_hash_t PHF::hash<uint32_t>(struct phf *, uint32_t);
-template phf_hash_t PHF::hash<uint64_t>(struct phf *, uint64_t);
-template phf_hash_t PHF::hash<phf_string_t>(struct phf *, phf_string_t);
+template phf_hash_t PHF::hash<uint32_t>(const struct phf *, uint32_t);
+template phf_hash_t PHF::hash<uint64_t>(const struct phf *, uint64_t);
+template phf_hash_t PHF::hash<phf_string_t>(const struct phf *, phf_string_t);
 #if !PHF_NO_LIBCXX
-template phf_hash_t PHF::hash<std::string>(struct phf *, std::string);
+template phf_hash_t PHF::hash<std::string>(const struct phf *, std::string);
 #endif
 
 PHF_PUBLIC void PHF::destroy(struct phf *phf) {

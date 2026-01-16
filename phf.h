@@ -135,6 +135,10 @@ typedef struct phf_string {
 } phf_string_t;
 
 struct phf {
+#ifdef __cplusplus
+    phf() : nodiv(false), seed(1792), r(0), m(0), g(nullptr), d_max(0), g_op(PHF_G_UNKNOWN), g_jmp(nullptr) {}
+#endif
+	
 	bool nodiv;
 
 	phf_seed_t seed;
@@ -146,6 +150,7 @@ struct phf {
 	size_t d_max; /* maximum displacement value in g */
 
 	enum {
+		PHF_G_UNKNOWN = 0,
 		PHF_G_UINT8_MOD_R = 1,
 		PHF_G_UINT8_BAND_R,
 		PHF_G_UINT16_MOD_R,
@@ -178,7 +183,7 @@ namespace PHF {
 	PHF_PUBLIC void compact(struct phf *);
 
 	template<typename key_t>
-	PHF_PUBLIC phf_hash_t hash(struct phf *, key_t);
+	PHF_PUBLIC phf_hash_t hash(const struct phf *, key_t);
 
 	PHF_PUBLIC void destroy(struct phf *);
 }
@@ -204,11 +209,11 @@ extern template phf_error_t PHF::init<phf_string_t, false>(struct phf *, const p
 extern template phf_error_t PHF::init<std::string, false>(struct phf *, const std::string[], const size_t, const size_t, const size_t, const phf_seed_t);
 #endif
 
-extern template phf_hash_t PHF::hash<uint32_t>(struct phf *, uint32_t);
-extern template phf_hash_t PHF::hash<uint64_t>(struct phf *, uint64_t);
-extern template phf_hash_t PHF::hash<phf_string_t>(struct phf *, phf_string_t);
+extern template phf_hash_t PHF::hash<uint32_t>(const struct phf *, uint32_t);
+extern template phf_hash_t PHF::hash<uint64_t>(const struct phf *, uint64_t);
+extern template phf_hash_t PHF::hash<phf_string_t>(const struct phf *, phf_string_t);
 #if !PHF_NO_LIBCXX
-extern template phf_hash_t PHF::hash<std::string>(struct phf *, std::string);
+extern template phf_hash_t PHF::hash<std::string>(const struct phf *, std::string);
 #endif
 
 #endif /* __cplusplus */
@@ -232,9 +237,9 @@ PHF_PUBLIC phf_error_t phf_init_string(struct phf *, const phf_string_t *, const
 
 PHF_PUBLIC void phf_compact(struct phf *);
 
-PHF_PUBLIC phf_hash_t phf_hash_uint32(struct phf *, const uint32_t);
-PHF_PUBLIC phf_hash_t phf_hash_uint64(struct phf *, const uint64_t);
-PHF_PUBLIC phf_hash_t phf_hash_string(struct phf *, const phf_string_t);
+PHF_PUBLIC phf_hash_t phf_hash_uint32(const struct phf *, const uint32_t);
+PHF_PUBLIC phf_hash_t phf_hash_uint64(const struct phf *, const uint64_t);
+PHF_PUBLIC phf_hash_t phf_hash_string(const struct phf *, const phf_string_t);
 
 PHF_PUBLIC void phf_destroy(struct phf *);
 
