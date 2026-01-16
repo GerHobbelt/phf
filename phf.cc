@@ -250,7 +250,7 @@ static inline bool phf_isprime(size_t n) {
 	size_t i;
 
 	if (n < PHF_COUNTOF(map))
-		return map[n];
+		return map[n] != 0;
 
 	for (i = 2; i < PHF_COUNTOF(map); i++) {
 		if (map[i] && (n % map[i] == 0))
