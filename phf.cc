@@ -1247,10 +1247,42 @@ extern "C" int luaopen_phf(lua_State *L) {
 #include <stdio.h>     /* fclose(3) fopen(3) fprintf(3) fread(3) freopen(3) printf(3) */
 #include <time.h>      /* CLOCKS_PER_SEC clock(3) */
 #include <string.h>    /* strcmp(3) */
+#include <getopt.h>
+#ifndef _WIN32
 #include <sys/param.h> /* BSD */
 #include <unistd.h>    /* getopt(3) */
 #include <strings.h>   /* ffsl(3) */
 #include <err.h>       /* err(3) errx(3) warnx(3) */
+#else
+#include <stdarg.h>
+
+typedef signed long long ssize_t;
+
+static void err(int exit_code, const char *msg) {
+	fprintf(stderr, "Error: %s\n", msg);
+	exit(exit_code);
+}
+static void errx(int exit_code, const char *fmt, ...) {
+	va_list a;
+	va_start(a, fmt);
+	fprintf(stderr, "Error: ");
+	vfprintf(stderr, fmt, a);
+	va_end(a);
+	fprintf(stderr, "\n");
+
+	exit(exit_code);
+}
+
+static void warnx(const char *fmt, ...) {
+	va_list a;
+	va_start(a, fmt);
+	fprintf(stderr, "Warning: ");
+	vfprintf(stderr, fmt, a);
+	va_end(a);
+	fprintf(stderr, "\n");
+}
+
+#endif
 
 #ifndef HAVE_VALGRIND_MEMCHECK_H
 #define HAVE_VALGRIND_MEMCHECK_H __has_include(<valgrind/memcheck.h>)
@@ -1430,7 +1462,7 @@ static inline void printkey(T k, phf_hash_t hash) {
 } /* printkey() */
 
 template<typename T, bool nodiv>
-static inline void exec(int argc, char **argv, size_t lambda, size_t alpha, size_t seed, bool verbose, bool noprint) {
+static inline void exec(int argc, const char **argv, size_t lambda, size_t alpha, size_t seed, bool verbose, bool noprint) {
 	T *k = NULL;
 	size_t n = 0, z = 0;
 	char *data = NULL;
@@ -1483,7 +1515,7 @@ static inline void exec(int argc, char **argv, size_t lambda, size_t alpha, size
 	phf_freearray(k, n);
 } /* exec() */
 
-static void printprimes(int argc, char **argv) {
+static void printprimes(int argc, const char **argv) {
 	intmax_t n = 0, m = UINT32_MAX;
 	char *end;
 
@@ -1502,7 +1534,7 @@ static void printprimes(int argc, char **argv) {
 
 	for (; n <= m; n++) {
 		if (phf_isprime(n))
-			printf("%" PRIdMAX "\n", n);
+			printf("%jd\n", n);
 	}
 } /* printprimes() */
 
@@ -1527,8 +1559,6 @@ int main(int argc, const char **argv) {
 #endif
 	} type = PHF_UINT32;
 	bool primes = 0;
-	extern char *optarg;
-	extern int optind;
 	int optc;
 
 	while (-1 != (optc = getopt(argc, argv, "f:l:a:s:2t:nvph"))) {
@@ -1604,7 +1634,7 @@ int main(int argc, const char **argv) {
 		return printprimes(argc, argv), 0;
 
 	if (strcmp(path, "-") && !freopen(path, "r", stdin))
-		err(1, "%s", path);
+		errx(1, "%s", path);
 
 	switch (type) {
 	case PHF_UINT32:
